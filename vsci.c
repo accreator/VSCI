@@ -62,9 +62,7 @@ void env_enlarge(struct ENV *env) {
 	if (env->len == env->size) {
 		struct VAR *new_var = (struct VAR*)malloc(env->size * 2 * sizeof(struct VAR));
 		int i;
-		for (i = 0; i < env->len; i++) {
-			new_var[i] = env->var[i];
-		}
+		for (i = 0; i < env->len; i++) new_var[i] = env->var[i];
 		env->size *= 2;
 		free(env->var);
 		env->var = new_var;
@@ -106,9 +104,30 @@ int next_token(char *p, struct TOKEN *tok) {
 	int ret = 0;
 	tok->type = token_null;
 	tok->id = NULL;
-	while (isspace(*p)) {
-		p++;
-		ret++;
+	while (1) {
+		while (isspace(*p)) {
+			p++;
+			ret++;
+		}
+		if (*p == '/' && *(p + 1) == '/') {
+			p += 2;
+			ret += 2;
+			while (*p != '\n') {
+				p++;
+				ret++;
+			}
+		}
+		else if (*p == '/' && *(p + 1) == '*') {
+			p += 2;
+			ret += 2;
+			while (*p != '*' || *(p + 1) != '/') {
+				p++;
+				ret++;
+			}
+			p += 2;
+			ret += 2;
+		}
+		else break;
 	}
 	if (*p == '&' && *(p + 1) == '&') {
 		tok->type = token_land;
@@ -185,9 +204,7 @@ int next_token(char *p, struct TOKEN *tok) {
 		int i;
 		tok->type = token_id;
 		tok->id = (char*)malloc(MAX_VAR_ID_LEN * sizeof(char));
-		for (i = 0; isalnum(p[i]) || p[i] == '_'; i++) {
-			tok->id[i] = p[i];
-		}
+		for (i = 0; isalnum(p[i]) || p[i] == '_'; i++) tok->id[i] = p[i];
 		tok->id[i] = '\0';
 		ret += i;
 	}
@@ -261,16 +278,16 @@ int next_token_type(char *p, int type) {
 	i = 0;
 	while (1) {
 		j = next_token(p + i, &tok);
-		if (tok.type == token_id) {
-			free(tok.id);
-		}
+		if (tok.type == token_id) free(tok.id);
 		if (tok.type == type) break;
 		i += j;
 	}
 	return i;
 }
 
-int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int opnum) { //assoc 1: left-to-right  0: right-to-left
+int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int opnum) {
+	//assoc 1: left-to-right  0: right-to-left
+	//opnum 0: any  otherwise, the number of operand
 	struct TOKEN tok;
 	char *q = p + len;
 	int i, j, k, l;
@@ -297,13 +314,10 @@ int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int 
 		}
 		for (l = 0; l < tsize; l++) {
 			if (tok.type == type[l]) {
-				if (k + 1 == opnum) {
-					if (assoc == 0)
-						return i;
-					else {
-						ret = i;
-						break;
-					}
+				if (opnum == 0 || k + 1 == opnum) {
+					if (assoc == 0) return i;
+					ret = i;
+					break;
 				}
 			}
 		}
@@ -897,22 +911,70 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 					if (t == var_int) {
 						env->var[env->len - 1].type = var_ints;
 						env->var[env->len - 1].ivals = (int *)malloc(v.ival * sizeof(int));
+						memset(env->var[env->len - 1].ivals, 0, v.ival * sizeof(int));
 					}
 					else {
 						env->var[env->len - 1].type = var_floats;
-						env->var[env->len - 1].fvals = (float *)malloc(v.ival * sizeof(int));
+						env->var[env->len - 1].fvals = (float *)malloc(v.ival * sizeof(float));
+						memset(env->var[env->len - 1].fvals, 0, v.ival * sizeof(float));
 					}
 					p += i;
 					p += next_token(p, &tok); //']'
+					p += next_token(p, &tok);
 				}
-				else {
-					env->var[env->len - 1].type = t;
-				}
-				p += next_token(p, &tok);
 				if (tok.type == ',') continue;
 				if (tok.type == ';') break;
 				if (tok.type == '=') {
-					//TODO
+					if (env->var[env->len - 1].type == var_ints || env->var[env->len - 1].type == var_floats) {
+						int t[] = { ',', '}'};
+						struct VAR v;
+						int j = 0;
+						p += next_token(p, &tok); //'{'
+						while (1) {
+							i = next_token_operator(p, q - p, t, 2, 0, 0);
+							v = parse_expression(p, i, env);
+							if (env->var[env->len - 1].type == var_ints) {
+								if (v.type == var_float) {
+									v.type = var_int;
+									v.ival = (int)v.fval;
+								}
+								env->var[env->len - 1].ivals[j] = v.ival;
+							}
+							else if (env->var[env->len - 1].type == var_floats) {
+								if (v.type == var_int) {
+									v.type = var_float;
+									v.fval = (float)v.ival;
+								}
+								env->var[env->len - 1].fvals[j] = v.fval;
+							}
+							p += i;
+							p += next_token(p, &tok); //',' or '}'
+							if (tok.type == '}') break;
+							j++;
+						}
+					}
+					else { //var_int or var_float
+						int t[] = { ',', ';' };
+						struct VAR v;
+						i = next_token_operator(p, q - p, t, 2, 0, 0);
+						v = parse_expression(p, i, env);
+						if (env->var[env->len - 1].type == var_int) {
+							if (v.type == var_float) {
+								v.type = var_int;
+								v.ival = (int)v.fval;
+							}
+							env->var[env->len - 1].ival = v.ival;
+						}
+						else if (env->var[env->len - 1].type == var_float) {
+							if (v.type == var_int) {
+								v.type = var_float;
+								v.fval = (float)v.ival;
+							}
+							env->var[env->len - 1].fval = v.fval;
+						}
+						p += i;
+					}
+					p += next_token(p, &tok);
 				}
 				if (tok.type == ',') continue;
 				if (tok.type == ';') break;
