@@ -1,4 +1,8 @@
 /*
+ Very Simple C Interpreter (VSCI)
+ Kai Sun 2015
+*/
+/*
  if else while break continue return
  float int void
  * / + - %
