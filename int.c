@@ -288,6 +288,7 @@ int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int 
 		if (tok.type == '(') {
 			i += j;
 			i += next_token_pair(p + i, ')');
+			k = 1;
 			continue;
 		}
 		for (l = 0; l < tsize; l++) {
@@ -788,7 +789,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 				if (ret) return ret;
 			}
 			p += i;
-			p += next_token(p, &tok); //'}'
+			p += next_token(p, &tok); //'}' or ';'
 			next_token(p, &tok);
 			if (tok.type == token_else) {
 				p += next_token(p, &tok); //else
@@ -807,6 +808,8 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 					env_delete_level(env);
 					if (ret) return ret;
 				}
+				p += i;
+				p += next_token(p, &tok); //'}' or ';'
 			}
 			else {
 				if (tok.type == token_id) free(tok.id);
@@ -847,7 +850,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 				else break;
 			}
 			p = _p + _i;
-			p += next_token(p, &tok); //'}'
+			p += next_token(p, &tok); //'}' or ';'
 			continue;
 		}
 		if (tok.type == token_return) {
