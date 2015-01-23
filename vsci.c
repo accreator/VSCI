@@ -1,5 +1,6 @@
 /*
  Very Simple C Interpreter (VSCI)
+ 
  Kai Sun 2015
 */
 /*
@@ -757,7 +758,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 	return ret;
 }
 
-int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  2 break  0 otherwise
+int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  2 break  3 continue  0 otherwise
 	struct TOKEN tok;
 	char *q = p + len;
 	int i, ret = 0;
@@ -864,6 +865,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 					env_delete_level(env);
 					if (ret == 1) return ret;
 					if (ret == 2) break;
+					if (ret == 3) continue;
 				}
 				else break;
 			}
@@ -887,7 +889,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 			}
 			return 1;
 		}
-		if (tok.type == token_continue) return 0;
+		if (tok.type == token_continue) return 3;
 		if (tok.type == token_break) return 2;
 		if (tok.type == token_int || tok.type == token_float) {
 			int t = (tok.type == token_int ? var_int : var_float);
@@ -1044,13 +1046,9 @@ void parse_function(char *p, struct ENV *env) {
 				p += next_token(p, &tok); //get the id
 			}
 			env->var[env->len - i].id = tok.id;
-			do {
-				p += next_token(p, &tok);
-			} while (tok.type != ']');
+			do p += next_token(p, &tok); while (tok.type != ']');
 		}
-		do {
-			p += next_token(p, &tok);
-		} while (tok.type == ',');
+		do p += next_token(p, &tok); while (tok.type == ',');
 	}
 	retp = env->len - i - 1;
 	if (type.type == token_int)
@@ -1074,15 +1072,12 @@ void parse_main(char *p) {
 	//add params to env ...
 	parse_function(p, &env);
 	//process the return value
-	if (env.var[retp].type == var_int) {
+	if (env.var[retp].type == var_int)
 		printf("val: %d\n", env.var[retp].ival);
-	}
-	else if (env.var[retp].type == var_float) {
+	else if (env.var[retp].type == var_float)
 		printf("val: %f\n", env.var[retp].fval);
-	}
-	else {
+	else
 		printf("val: null\n");
-	}
 	env_delete_level(&env);
 	env_free(&env);
 }
@@ -1094,9 +1089,7 @@ int main(int argc, char *argv[]) {
 		FILE *in;
 		code = (char*)malloc(MAX_CODE_LEN * sizeof(char));
 		in = fopen(argv[1], "r");
-		while (fscanf(in, "%c", &code[len]) != EOF) {
-			len++;
-		}
+		while (fscanf(in, "%c", &code[len]) != EOF) len++;
 		code[len] = '\0';
 		fclose(in);
 		parse_main(code);
