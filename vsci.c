@@ -100,10 +100,24 @@ void env_delete_level(struct ENV *env) {
 		if (env->var[env->len - 1].id != NULL)
 			free(env->var[env->len - 1].id);
 		if (env->var[env->len - 1].type == var_ints) {
-			free(env->var[env->len - 1].ivals);
+			int i, f = 1;
+			for (i = env->len - 2; i >= 0; i--) {
+				if (env->var[i].type == var_ints && env->var[i].ivals == env->var[env->len - 1].ivals) {
+					f = 0;
+					break;
+				}
+			}
+			if(f) free(env->var[env->len - 1].ivals);
 		}
 		else if (env->var[env->len - 1].type == var_floats) {
-			free(env->var[env->len - 1].fvals);
+			int i, f = 1;
+			for (i = env->len - 2; i >= 0; i--) {
+				if (env->var[i].type == var_floats && env->var[i].fvals == env->var[env->len - 1].fvals) {
+					f = 0;
+					break;
+				}
+			}
+			if(f) free(env->var[env->len - 1].fvals);
 		}
 		env->len--;
 	}
