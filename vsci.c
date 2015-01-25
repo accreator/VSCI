@@ -99,6 +99,12 @@ void env_delete_level(struct ENV *env) {
 	while (env->var[env->len - 1].type != var_null) {
 		if (env->var[env->len - 1].id != NULL)
 			free(env->var[env->len - 1].id);
+		if (env->var[env->len - 1].type == var_ints) {
+			free(env->var[env->len - 1].ivals);
+		}
+		else if (env->var[env->len - 1].type == var_floats) {
+			free(env->var[env->len - 1].fvals);
+		}
 		env->len--;
 	}
 	env->len--;
