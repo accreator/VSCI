@@ -15,12 +15,25 @@
  1 dim array only
 */
 
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdarg.h>
 
 #define MAX_VAR_ID_LEN 32
 #define MAX_CODE_LEN 256*1024
+
+void error_log(char *fmt, ...)
+{
+	char buffer[1024];
+	va_list va;
+	va_start(va, fmt);
+	vsprintf(buffer, fmt, va);
+	printf("%s\n", buffer);
+	fflush(stdout);
+	va_end(va);
+	exit(1);
+}
 
 enum {var_int, var_float, var_void, var_ints, var_floats, var_null};
 
@@ -237,6 +250,7 @@ int next_token(char *p, struct TOKEN *tok) {
 			ret += i;
 		}
 	}
+	else error_log("Unexpected symbol %c", *p);
 	return ret;
 }
 
@@ -673,7 +687,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 		else { //'%'
 			if (v.type == var_int)
 				ret.ival = v.ival % u.ival;
-			//else log("ERROR")
+			else error_log("The operands of %% must be integer");
 		}
 		return ret;
 	}
@@ -694,13 +708,13 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			ret.type = var_int;
 			if (v.type == var_int)
 				ret.ival = !v.ival;
-			//else log("ERROR")
+			else error_log("The operands of ! must be integer");
 		}
 		else { //'~'
 			ret.type = var_int;
 			if (v.type == var_int)
 				ret.ival = ~v.ival;
-			//else log("ERROR")
+			else error_log("The operands of ~ must be integer");
 		}
 		return ret;
 	}
@@ -722,6 +736,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 		return ret;
 	}
 	//tok.type == token_id
+	if (tok.type != token_id) error_log("Unexpected syntax error");
 	for (j = env->len - 1; j >= 0; j--) {
 		if (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0) {
 			struct VAR v;
@@ -755,6 +770,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			}
 		}
 	}
+	error_log("Undefined variable %s", tok.id);
 	return ret;
 }
 
@@ -885,7 +901,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 					env->var[retp].ival = (v.type == var_int ? v.ival : (int)v.fval);
 				else if (env->var[retp].type == var_float)
 					env->var[retp].fval = (v.type == var_float ? v.fval : (float)v.ival);
-				//else log("ERROR")
+				else error_log("Type of return value must match the definition");
 			}
 			return 1;
 		}
@@ -932,6 +948,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 						struct VAR v;
 						int j = 0;
 						p += next_token(p, &tok); //'{'
+						if (tok.type != '{') error_log("Syntax of array initialization is incorrect");
 						while (1) {
 							i = next_token_operator(p, q - p, t, 2, 0, 0);
 							v = parse_expression(p, i, env);
@@ -952,6 +969,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 							p += i;
 							p += next_token(p, &tok); //',' or '}'
 							if (tok.type == '}') break;
+							if (tok.type != ',') error_log("Syntax of array initialization is incorrect");
 							j++;
 						}
 					}
