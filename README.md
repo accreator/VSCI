@@ -5,7 +5,7 @@ Currently, VSCI supports the following features:
 
 * if else while break continue return
 * float int void
-* / + - % & ^ ~ | ,
+* / + - % & ^ ~ | << >> ,
 * > < >= <= == != && || !
 * = ( ) , ; { } [ ] 
 * *(only 1-dim array)*
@@ -14,12 +14,12 @@ Try the following:
 
     #For Windows
     gcc vsci.c -o vsci.exe
-    vsci test/test3.c
+    vsci test/test8.c
 
     #For Linux/Mac/BSD
     gcc vsci.c -o vsci
-    ./vsci test/test3.c
+    ./vsci test/test8.c
 
-It will output `ln(1.5)`
+It will output the square root of 2
 
 Kai Sun

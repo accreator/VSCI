@@ -8,7 +8,7 @@
  float int void
  * / + - %
  > < >= <= == !=
- & ^ ~ |
+ & ^ ~ | << >>
  && || !
  =
  ( ) [ ] , ; { }
@@ -41,6 +41,7 @@ enum {
 	token_int = 128, token_float, token_void,
 	token_if, token_else, token_while, token_break, token_continue, token_return,
 	token_geq, token_leq, token_eq, token_neq,
+	token_shl, token_shr,
 	token_land, token_lor,
 	token_id, token_ival, token_fval, token_null
 };
@@ -163,30 +164,14 @@ int next_token(char *p, struct TOKEN *tok) {
 		}
 		else break;
 	}
-	if (*p == '&' && *(p + 1) == '&') {
-		tok->type = token_land;
-		ret += 2;
-	}
-	else if (*p == '|' && *(p + 1) == '|') {
-		tok->type = token_lor;
-		ret += 2;
-	}
-	else if (*p == '>' && *(p + 1) == '=') {
-		tok->type = token_geq;
-		ret += 2;
-	}
-	else if (*p == '<' && *(p + 1) == '=') {
-		tok->type = token_leq;
-		ret += 2;
-	}
-	else if (*p == '=' && *(p + 1) == '=') {
-		tok->type = token_eq;
-		ret += 2;
-	}
-	else if (*p == '!' && *(p + 1) == '=') {
-		tok->type = token_neq;
-		ret += 2;
-	}
+	if (memcmp(p, "&&", 2) == 0) { tok->type = token_land; ret += 2; }
+	else if (memcmp(p, "||", 2) == 0) { tok->type = token_lor; ret += 2; }
+	else if (memcmp(p, ">=", 2) == 0) { tok->type = token_geq; ret += 2; }
+	else if (memcmp(p, "<=", 2) == 0) { tok->type = token_leq; ret += 2; }
+	else if (memcmp(p, "==", 2) == 0) { tok->type = token_eq; ret += 2; }
+	else if (memcmp(p, "!=", 2) == 0) { tok->type = token_neq; ret += 2; }
+	else if (memcmp(p, "<<", 2) == 0) { tok->type = token_shl; ret += 2; }
+	else if (memcmp(p, ">>", 2) == 0) { tok->type = token_shr; ret += 2; }
 	else if (*p == '*' || *p == '/' || *p == '+' || *p == '-' || *p == '%'
 		|| *p == '>' || *p == '<'
 		|| *p == '&' || *p == '^' || *p == '~' || *p == '|'
@@ -196,44 +181,15 @@ int next_token(char *p, struct TOKEN *tok) {
 		tok->type = *p;
 		ret += 1;
 	}
-	else if (*p == 'i' && *(p + 1) == 'n' && *(p + 2) == 't' && !isalnum(*(p + 3)) && *(p + 3) != '_') {
-		tok->type = token_int;
-		ret += 3;
-	}
-	else if (*p == 'f' && *(p + 1) == 'l' && *(p + 2) == 'o' && *(p + 3) == 'a' && *(p + 4) == 't' && !isalnum(*(p + 5)) && *(p + 5) != '_') {
-		tok->type = token_float;
-		ret += 5;
-	}
-	else if (*p == 'v' && *(p + 1) == 'o' && *(p + 2) == 'i' && *(p + 3) == 'd' && !isalnum(*(p + 4)) && *(p + 4) != '_') {
-		tok->type = token_void;
-		ret += 4;
-	}
-	else if (*p == 'i' && *(p + 1) == 'f' && !isalnum(*(p + 2)) && *(p + 2) != '_') {
-		tok->type = token_if;
-		ret += 2;
-	}
-	else if (*p == 'e' && *(p + 1) == 'l' && *(p + 2) == 's' && *(p + 3) == 'e' && !isalnum(*(p + 4)) && *(p + 4) != '_') {
-		tok->type = token_else;
-		ret += 4;
-	}
-	else if (*p == 'w' && *(p + 1) == 'h' && *(p + 2) == 'i' && *(p + 3) == 'l' && *(p + 4) == 'e' && !isalnum(*(p + 5)) && *(p + 5) != '_') {
-		tok->type = token_while;
-		ret += 5;
-	}
-	else if (*p == 'b' && *(p + 1) == 'r' && *(p + 2) == 'e' && *(p + 3) == 'a' && *(p + 4) == 'k' && !isalnum(*(p + 5)) && *(p + 5) != '_') {
-		tok->type = token_break;
-		ret += 5;
-	}
-	else if (*p == 'c' && *(p + 1) == 'o' && *(p + 2) == 'n' && *(p + 3) == 't' && *(p + 4) == 'i'
-		&& *(p + 5) == 'n' && *(p + 6) == 'u' && *(p + 7) == 'e' && !isalnum(*(p + 8)) && *(p + 8) != '_') {
-		tok->type = token_continue;
-		ret += 8;
-	}
-	else if (*p == 'r' && *(p + 1) == 'e' && *(p + 2) == 't' && *(p + 3) == 'u' && *(p + 4) == 'r'
-		&& *(p + 5) == 'n' && !isalnum(*(p + 6)) && *(p + 6) != '_') {
-		tok->type = token_return;
-		ret += 6;
-	}
+	else if (memcmp(p, "int", 3) == 0 && !isalnum(*(p + 3)) && *(p + 3) != '_') { tok->type = token_int; ret += 3; }
+	else if (memcmp(p, "float", 5) == 0 && !isalnum(*(p + 5)) && *(p + 5) != '_') { tok->type = token_float; ret += 5; }
+	else if (memcmp(p, "void", 4) == 0 && !isalnum(*(p + 4)) && *(p + 4) != '_') { tok->type = token_void; ret += 4; }
+	else if (memcmp(p, "if", 2) == 0 && !isalnum(*(p + 2))  && *(p + 2) != '_') { tok->type = token_if; ret += 2; }
+	else if (memcmp(p, "else", 4) == 0 && !isalnum(*(p + 4)) && *(p + 4) != '_') { tok->type = token_else; ret += 4; }
+	else if (memcmp(p, "while", 5) == 0 && !isalnum(*(p + 5)) && *(p + 5) != '_') { tok->type = token_while; ret += 5; }
+	else if (memcmp(p, "break", 5) == 0 && !isalnum(*(p + 5)) && *(p + 5) != '_') { tok->type = token_break; ret += 5; }
+	else if (memcmp(p, "continue", 8) == 0 && !isalnum(*(p + 8)) && *(p + 8) != '_') { tok->type = token_continue; ret += 8; }
+	else if (memcmp(p, "return", 6) == 0 && !isalnum(*(p + 6)) && *(p + 6) != '_') { tok->type = token_return; ret += 6; }
 	else if (isalpha(*p) || *p == '_') {
 		int i;
 		tok->type = token_id;
@@ -278,18 +234,9 @@ int next_token_pair(char *p, int type) {
 	struct TOKEN tok;
 	int i, j, k;
 	int l, r;
-	if (type == '}') {
-		l = '{';
-		r = '}';
-	}
-	else if (type == ']') {
-		l = '[';
-		r = ']';
-	}
-	else { //')'
-		l = '(';
-		r = ')';
-	}
+	if (type == '}') { l = '{'; r = '}'; }
+	else if (type == ']') { l = '['; r = ']'; }
+	else /* ')' */ { l = '('; r = ')'; }
 	i = 0;
 	j = 0;
 	while (1) {
@@ -331,22 +278,9 @@ int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int 
 	k = 0;
 	while (p+i < q) {
 		j = next_token(p + i, &tok);
-		if (tok.type == '{') {
-			i += j;
-			i += next_token_pair(p + i, '}');
-			continue;
-		}
-		if (tok.type == '[') {
-			i += j;
-			i += next_token_pair(p + i, ']');
-			continue;
-		}
-		if (tok.type == '(') {
-			i += j;
-			i += next_token_pair(p + i, ')');
-			k = 1;
-			continue;
-		}
+		if (tok.type == '{') { i += j; i += next_token_pair(p + i, '}'); continue; }
+		if (tok.type == '[') { i += j; i += next_token_pair(p + i, ']'); continue; }
+		if (tok.type == '(') { i += j; i += next_token_pair(p + i, ')'); k = 1; continue; }
 		for (l = 0; l < tsize; l++) {
 			if (tok.type == type[l]) {
 				if (opnum == 0 || k + 1 == opnum) {
@@ -378,365 +312,216 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 	struct TOKEN tok;
 	char *q = p + len;
 	struct VAR ret;
-	int i, j;
-	int t1[] = { ',' };
-	int t2[] = { '=' };
-	int t3[] = { token_lor };
-	int t4[] = { token_land };
-	int t5[] = { '|' };
-	int t6[] = { '^' };
-	int t7[] = { '&' };
-	int t8[] = { token_neq };
-	int t9[] = { token_eq };
-	int t10[] = { '>', token_geq, '<', token_leq };
-	int t11[] = { '+', '-' };
-	int t12[] = { '/', '*', '%' };
-	int t13[] = { '-', '!', '~' };
-
+	int i, j, l;
+	int tl[15][7] = {
+		//num, assoc, opnum,  tok_1, tok_2, ...
+		{ 1, 1, 2, ',' }, //0
+		{ 1, 0, 2, '=' }, //1
+		{ 0 }, //2
+		{ 1, 1, 2, token_lor }, //3
+		{ 1, 1, 2, token_land }, //4
+		{ 1, 1, 2, '|' }, //5
+		{ 1, 1, 2, '^' }, //6
+		{ 1, 1, 2, '&' }, //7
+		{ 2, 1, 2, token_neq, token_eq }, //8
+		{ 4, 1, 2, '>', token_geq, '<', token_leq }, //9
+		{ 2, 1, 2, token_shl, token_shr}, //10
+		{ 2, 1, 2, '+', '-' }, //11
+		{ 3, 1, 2, '/', '*', '%' }, //12
+		{ 3, 0, 1, '-', '!', '~' }, //13
+		{ 0 } //14
+	};
 	ret.id = NULL;
-	if ((i = next_token_operator(p, len, t1, 1, 1, 2)) != -1) { //','
-		parse_expression(p, i, env);
-		p += i;
-		p += next_token(p, &tok); //','
-		return parse_expression(p, q - p, env);
-	}
-	if ((i = next_token_operator(p, len, t2, 1, 0, 2)) != -1) { //'='
-		struct VAR v, u;
-		i += next_token(p + i, &tok); //'='
-		v = parse_expression(p + i, q - (p + i), env);
-		p += next_token(p, &tok); //id
-		for (j = env->len - 1; j >= 0; j--) {
-			if (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0) {
-				free(tok.id);
-				if ((env->var[j].type == var_int || env->var[j].type == var_ints) && v.type == var_float) {
-					v.type = var_int;
-					v.ival = (int)v.fval;
+	for (l = 0; l < 15; l++) {
+		if (tl[l][0] == 0) continue;
+		if ((i = next_token_operator(p, len, &tl[l][3], tl[l][0], tl[l][1], tl[l][2])) == -1) continue;
+		if (l == 0) { //','
+			parse_expression(p, i, env);
+			p += i;
+			p += next_token(p, &tok); //','
+			return parse_expression(p, q - p, env);
+		}
+		if (l == 1) { //'='
+			struct VAR v, u;
+			i += next_token(p + i, &tok); //'='
+			v = parse_expression(p + i, q - (p + i), env);
+			p += next_token(p, &tok); //id
+			for (j = env->len - 1; j >= 0; j--) {
+				if (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0) {
+					free(tok.id);
+					if ((env->var[j].type == var_int || env->var[j].type == var_ints) && v.type == var_float) {
+						v.type = var_int;
+						v.ival = (int)v.fval;
+					}
+					else if ((env->var[j].type == var_float || env->var[j].type == var_floats) && v.type == var_int) {
+						v.type = var_float;
+						v.fval = (float)v.ival;
+					}
+					if (env->var[j].type == var_int) {
+						env->var[j].ival = v.ival;
+						ret.type = v.type;
+						ret.ival = v.ival;
+						return ret;
+					}
+					if (env->var[j].type == var_float) {
+						env->var[j].fval = v.fval;
+						ret.type = v.type;
+						ret.fval = v.fval;
+						return ret;
+					}
+					p += next_token(p, &tok); //[
+					i = next_token_pair(p, ']');
+					u = parse_expression(p, i, env);
+					if (u.type == var_float) {
+						u.type = var_int;
+						u.ival = (int)u.fval;
+					}
+					if (env->var[j].type == var_ints) {
+						env->var[j].ivals[u.ival] = v.ival;
+						ret.type = v.type;
+						ret.ival = v.ival;
+						return ret;
+					}
+					if (env->var[j].type == var_floats) {
+						env->var[j].fvals[u.ival] = v.fval;
+						ret.type = v.type;
+						ret.fval = v.fval;
+						return ret;
+					}
 				}
-				else if ((env->var[j].type == var_float || env->var[j].type == var_floats) && v.type == var_int) {
+			}
+			error_log("Undefined variable %s", tok.id);
+		}
+		if (l == 3 || l == 4) { //token_lor, token_land
+			struct VAR v;
+			v = parse_expression(p, i, env);
+			if (v.type == var_float) {
+				v.type = var_int;
+				v.ival = (int)v.fval;
+			}
+			if (l==3 && v.ival || l==4 && !v.ival) {
+				ret.type = var_int;
+				ret.ival = (1 == 3);
+				return ret;
+			}
+			p += i;
+			p += next_token(p, &tok); //token_lor, token_land
+			v = parse_expression(p, q - p, env);
+			if (v.type == var_float) {
+				v.type = var_int;
+				v.ival = (int)v.fval;
+			}
+			ret.type = var_int;
+			ret.ival = (l == 3) ? (0 || v.ival) : (1 && v.ival);
+			return ret;
+		}
+		if (l == 5 || l == 6 || l == 7 || l == 10) { //'|', '^', '&', token_shl, token_shr
+			struct VAR v, u;
+			v = parse_expression(p, i, env);
+			if (v.type == var_float) {
+				v.type = var_int;
+				v.ival = (int)v.fval;
+			}
+			p += i;
+			p += next_token(p, &tok); //'|', '^', '&'
+			u = parse_expression(p, q - p, env);
+			if (u.type == var_float) {
+				u.type = var_int;
+				u.ival = (int)u.fval;
+			}
+			ret.type = var_int;
+			ret.ival = (tok.type == '|') ? (v.ival | u.ival) : (
+					(tok.type == '^') ? (v.ival ^ u.ival) : (
+					(tok.type == '&') ? (v.ival & u.ival) : (
+					(tok.type == token_shl) ? (v.ival << u.ival) :
+					/* token_shr */ (v.ival >> u.ival)
+				)));
+			return ret;
+		}
+		if (l == 8 || l == 9) { //token_neq, token_eq, '>', token_geq, '<', token_leq
+			struct VAR v, u;
+			v = parse_expression(p, i, env);
+			p += i;
+			p += next_token(p, &tok); //token_neq, token_eq, '>', token_geq, '<', token_leq
+			u = parse_expression(p, q - p, env);
+
+			if (v.type != u.type) {
+				if (v.type == var_int) {
 					v.type = var_float;
 					v.fval = (float)v.ival;
 				}
-				if (env->var[j].type == var_int) {
-					env->var[j].ival = v.ival;
-					ret.type = v.type;
-					ret.ival = v.ival;
-					return ret;
-				}
-				if (env->var[j].type == var_float) {
-					env->var[j].fval = v.fval;
-					ret.type = v.type;
-					ret.fval = v.fval;
-					return ret;
-				}
-				p += next_token(p, &tok); //[
-				i = next_token_pair(p, ']');
-				u = parse_expression(p, i, env);
-				if (u.type == var_float) {
-					u.type = var_int;
-					u.ival = (int)u.fval;
-				}
-				if (env->var[j].type == var_ints) {
-					env->var[j].ivals[u.ival] = v.ival;
-					ret.type = v.type;
-					ret.ival = v.ival;
-					return ret;
-				}
-				if (env->var[j].type == var_floats) {
-					env->var[j].fvals[u.ival] = v.fval;
-					ret.type = v.type;
-					ret.fval = v.fval;
-					return ret;
+				else {
+					u.type = var_float;
+					u.fval = (float)u.ival;
 				}
 			}
-		}
-	}
-	if ((i = next_token_operator(p, len, t3, 1, 1, 2)) != -1) { //token_lor
-		struct VAR v;
-		v = parse_expression(p, i, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		if (v.ival) {
 			ret.type = var_int;
-			ret.ival = 1;
+			if (tok.type == token_neq) ret.ival = (v.type == var_int) ? (v.ival != u.ival) : (v.fval != u.fval);
+			else if (tok.type == token_eq) ret.ival = (v.type == var_int) ? (v.ival == u.ival) : (v.fval == u.fval);
+			else if (tok.type == '>') ret.ival = (v.type == var_int) ? (v.ival > u.ival) : (v.fval > u.fval);
+			else if (tok.type == token_geq) ret.ival = (v.type == var_int) ? (v.ival >= u.ival) : (v.fval >= u.fval);
+			else if (tok.type == '<') ret.ival = (v.type == var_int) ? (v.ival < u.ival) : (v.fval < u.fval);
+			else /*token_leq*/ ret.ival = (v.type == var_int) ? (v.ival <= u.ival) : (v.fval <= u.fval);
 			return ret;
 		}
-		p += i;
-		p += next_token(p, &tok); //token)lor
-		v = parse_expression(p, q - p, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		ret.type = var_int;
-		ret.ival = 0 || v.ival;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t4, 1, 1, 2)) != -1) { //token_land
-		struct VAR v;
-		v = parse_expression(p, i, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		if (!v.ival) {
-			ret.type = var_int;
-			ret.ival = 0;
-			return ret;
-		}
-		p += i;
-		p += next_token(p, &tok); //token_land
-		v = parse_expression(p, q - p, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		ret.type = var_int;
-		ret.ival = 1 && v.ival;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t5, 1, 1, 2)) != -1) { //'|'
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		p += i;
-		p += next_token(p, &tok); //'|'
-		u = parse_expression(p, q - p, env);
-		if (u.type == var_float) {
-			u.type = var_int;
-			u.ival = (int)u.fval;
-		}
-		ret.type = var_int;
-		ret.ival = v.ival | u.ival;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t6, 1, 1, 2)) != -1) { //'^'
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		p += i;
-		p += next_token(p, &tok); //'^'
-		u = parse_expression(p, q - p, env);
-		if (u.type == var_float) {
-			u.type = var_int;
-			u.ival = (int)u.fval;
-		}
-		ret.type = var_int;
-		ret.ival = v.ival ^ u.ival;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t7, 1, 1, 2)) != -1) { //'&'
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		if (v.type == var_float) {
-			v.type = var_int;
-			v.ival = (int)v.fval;
-		}
-		p += i;
-		p += next_token(p, &tok); //'&'
-		u = parse_expression(p, q - p, env);
-		if (u.type == var_float) {
-			u.type = var_int;
-			u.ival = (int)u.fval;
-		}
-		ret.type = var_int;
-		ret.ival = v.ival & u.ival;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t8, 1, 1, 2)) != -1) { //token_neq
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		p += i;
-		p += next_token(p, &tok); //token_neq
-		u = parse_expression(p, q - p, env);
+		if (l == 11 || l == 12) { //'+', '-', '*', '/', '%'
+			struct VAR v, u;
+			v = parse_expression(p, i, env);
+			p += i;
+			p += next_token(p, &tok); //'+', '-', '*', '/', '%'
+			u = parse_expression(p, q - p, env);
 
-		if (v.type != u.type) {
-			if (v.type == var_int) {
-				v.type = var_float;
-				v.fval = (float)v.ival;
+			if (v.type != u.type) {
+				if (v.type == var_int) {
+					v.type = var_float;
+					v.fval = (float)v.ival;
+				}
+				else {
+					u.type = var_float;
+					u.fval = (float)u.ival;
+				}
 			}
-			else {
-				u.type = var_float;
-				u.fval = (float)u.ival;
-			}
-		}
-		ret.type = var_int;
-		if (v.type == var_int)
-			ret.ival = v.ival != u.ival;
-		else
-			ret.ival = v.fval != u.fval;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t9, 1, 1, 2)) != -1) { //token_eq
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		p += i;
-		p += next_token(p, &tok); //token_eq
-		u = parse_expression(p, q - p, env);
-
-		if (v.type != u.type) {
-			if (v.type == var_int) {
-				v.type = var_float;
-				v.fval = (float)v.ival;
-			}
-			else {
-				u.type = var_float;
-				u.fval = (float)u.ival;
-			}
-		}
-		ret.type = var_int;
-		if (v.type == var_int)
-			ret.ival = v.ival == u.ival;
-		else
-			ret.ival = v.fval == u.fval;
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t10, 4, 1, 2)) != -1) { //'>', token_geq, '<', token_leq
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		p += i;
-		p += next_token(p, &tok); //'>', token_geq, '<', token_leq
-		u = parse_expression(p, q - p, env);
-
-		if (v.type != u.type) {
-			if (v.type == var_int) {
-				v.type = var_float;
-				v.fval = (float)v.ival;
-			}
-			else {
-				u.type = var_float;
-				u.fval = (float)u.ival;
-			}
-		}
-		ret.type = var_int;
-		if (tok.type == '>') {
-			if (v.type == var_int)
-				ret.ival = v.ival > u.ival;
-			else
-				ret.ival = v.fval > u.fval;
-		}
-		else if (tok.type == token_geq) {
-			if (v.type == var_int)
-				ret.ival = v.ival >= u.ival;
-			else
-				ret.ival = v.fval >= u.fval;
-		}
-		else if (tok.type == '<') {
-			if (v.type == var_int)
-				ret.ival = v.ival < u.ival;
-			else
-				ret.ival = v.fval < u.fval;
-		}
-		else { //token_leq
-			if (v.type == var_int)
-				ret.ival = v.ival <= u.ival;
-			else
-				ret.ival = v.fval <= u.fval;
-		}
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t11, 2, 1, 2)) != -1) { //'+', '-'
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		p += i;
-		p += next_token(p, &tok); //'+', '-'
-		u = parse_expression(p, q - p, env);
-
-		if (v.type != u.type) {
-			if (v.type == var_int) {
-				v.type = var_float;
-				v.fval = (float)v.ival;
-			}
-			else {
-				u.type = var_float;
-				u.fval = (float)u.ival;
-			}
-		}
-		ret.type = v.type;
-		if (tok.type == '+') {
-			if (v.type == var_int)
-				ret.ival = v.ival + u.ival;
-			else
-				ret.fval = v.fval + u.fval;
-		}
-		else { //'-'
-			if (v.type == var_int)
-				ret.ival = v.ival - u.ival;
-			else
-				ret.fval = v.fval - u.fval;
-		}
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t12, 3, 1, 2)) != -1) { //'*', '/', '%'
-		struct VAR v, u;
-		v = parse_expression(p, i, env);
-		p += i;
-		p += next_token(p, &tok); //'*', '/', '%'
-		u = parse_expression(p, q - p, env);
-
-		if (v.type != u.type) {
-			if (v.type == var_int) {
-				v.type = var_float;
-				v.fval = (float)v.ival;
-			}
-			else {
-				u.type = var_float;
-				u.fval = (float)u.ival;
-			}
-		}
-		ret.type = v.type;
-		if (tok.type == '*') {
-			if (v.type == var_int)
-				ret.ival = v.ival * u.ival;
-			else
-				ret.fval = v.fval * u.fval;
-		}
-		else if (tok.type == '/') {
-			if (v.type == var_int)
-				ret.ival = v.ival / u.ival;
-			else
-				ret.fval = v.fval / u.fval;
-		}
-		else { //'%'
-			if (v.type == var_int)
-				ret.ival = v.ival % u.ival;
-			else error_log("The operands of %% must be integer");
-		}
-		return ret;
-	}
-	if ((i = next_token_operator(p, len, t13, 3, 0, 1)) != -1) { //'-', '!', '~'
-		struct VAR v;
-		p += i;
-		p += next_token(p, &tok); //'-', '!', '~'
-		v = parse_expression(p, q - p, env);
-
-		if (tok.type == '-') {
 			ret.type = v.type;
-			if (v.type == var_int)
-				ret.ival = -v.ival;
-			else
-				ret.fval = -v.fval;
+			if (tok.type == '+') {
+				if (v.type == var_int) ret.ival = v.ival + u.ival; else ret.fval = v.fval + u.fval;
+			}
+			else if (tok.type == '-') {
+				if (v.type == var_int) ret.ival = v.ival - u.ival; else ret.fval = v.fval - u.fval;
+			}
+			else if (tok.type == '*') {
+				if (v.type == var_int) ret.ival = v.ival * u.ival; else ret.fval = v.fval * u.fval;
+			}
+			else if (tok.type == '/') {
+				if (v.type == var_int) ret.ival = v.ival / u.ival; else ret.fval = v.fval / u.fval;
+			}
+			else { //'%'
+				if (v.type == var_int) ret.ival = v.ival % u.ival;
+				else error_log("The operands of %% must be integer");
+			}
+			return ret;
 		}
-		else if (tok.type == '!') {
-			ret.type = var_int;
-			if (v.type == var_int)
-				ret.ival = !v.ival;
-			else error_log("The operands of ! must be integer");
+		if (l == 13) { //'-', '!', '~'
+			struct VAR v;
+			p += i;
+			p += next_token(p, &tok); //'-', '!', '~'
+			v = parse_expression(p, q - p, env);
+
+			if (tok.type == '-') {
+				ret.type = v.type;
+				if (v.type == var_int) ret.ival = -v.ival; else ret.fval = -v.fval;
+			}
+			else if (tok.type == '!') {
+				ret.type = var_int;
+				if (v.type == var_int) ret.ival = !v.ival;
+				else error_log("The operands of ! must be integer");
+			}
+			else { //'~'
+				ret.type = var_int;
+				if (v.type == var_int) ret.ival = ~v.ival;
+				else error_log("The operands of ~ must be integer");
+			}
+			return ret;
 		}
-		else { //'~'
-			ret.type = var_int;
-			if (v.type == var_int)
-				ret.ival = ~v.ival;
-			else error_log("The operands of ~ must be integer");
-		}
-		return ret;
 	}
 	//the rest is either (exp) or id or id[] or val
 	//currently do not support id(...)
