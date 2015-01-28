@@ -67,10 +67,19 @@ struct TOKEN {
 	};
 };
 
+struct OPT {
+	void **nxt_tok;
+	void **nxt_tok_p;
+	void **prs_exp;
+};
+
 struct ENV {
 	struct VAR *var;
 	int size;
 	int len;
+
+	char *code;
+	struct OPT *opt;
 };
 
 void env_enlarge(struct ENV *env) {
@@ -125,18 +134,51 @@ void env_delete_level(struct ENV *env) {
 	env->len--;
 }
 
-void env_init(struct ENV *env) {
+void env_init(struct ENV *env, char *code) {
 	env->len = 0;
 	env->size = 128;
 	env->var = (struct VAR*)malloc(env->size * sizeof(struct VAR));
+
+	env->code = code;
+	env->opt = (struct OPT*)malloc(strlen(code) * sizeof(struct OPT));
+	memset(env->opt, 0, strlen(code) * sizeof(struct OPT));
 }
 
 void env_free(struct ENV *env) {
+	int i;
 	free(env->var);
+
+	for (i = strlen(env->code) - 1; i >= 0; i--) {
+		if (env->opt[i].nxt_tok != NULL) {
+			if (((struct TOKEN *)(env->opt[i].nxt_tok[0]))->type == token_id) {
+				if (((struct TOKEN *)(env->opt[i].nxt_tok[0]))->id != NULL)
+					free(((struct TOKEN *)(env->opt[i].nxt_tok[0]))->id);
+			}
+			free(env->opt[i].nxt_tok[0]);
+			free(env->opt[i].nxt_tok);
+		}
+		if (env->opt[i].nxt_tok_p != NULL) free(env->opt[i].nxt_tok_p);
+		if (env->opt[i].prs_exp != NULL) free(env->opt[i].prs_exp);
+	}
+	free(env->opt);
 }
 
-int next_token(char *p, struct TOKEN *tok) {
+int next_token(char *p, struct TOKEN *tok, struct ENV *env) {
 	int ret = 0;
+	
+	int opt_p = p - env->code;
+	if (env->opt[opt_p].nxt_tok != NULL) {
+		tok->type = ((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->type;
+		if (tok->type == token_id)
+			tok->id = ((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->id == NULL ? NULL : strdup(((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->id);
+		if (tok->type == token_ival)
+			tok->ival = ((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->ival;
+		if (tok->type == token_fval)
+			tok->fval = ((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->fval;
+		ret = (int)(env->opt[opt_p].nxt_tok[1]);
+		return ret;
+	}
+
 	tok->type = token_null;
 	tok->id = NULL;
 	while (1) {
@@ -227,20 +269,39 @@ int next_token(char *p, struct TOKEN *tok) {
 		}
 	}
 	else error_log("Unexpected symbol %c", *p);
+
+	env->opt[opt_p].nxt_tok = (void **)malloc(2*sizeof(void*));
+	env->opt[opt_p].nxt_tok[0] = malloc(sizeof(struct TOKEN));
+	((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->type = tok->type;
+	if (tok->type == token_id)
+		((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->id = (tok->id == NULL) ? NULL : strdup(tok->id);
+	else if (tok->type == token_ival)
+		((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->ival = tok->ival;
+	else if (tok->type == token_fval)
+		((struct TOKEN *)(env->opt[opt_p].nxt_tok[0]))->fval = tok->fval;
+	env->opt[opt_p].nxt_tok[1] = (void *)ret;
 	return ret;
 }
 
-int next_token_pair(char *p, int type) {
+int next_token_pair(char *p, int type, struct ENV *env) {
 	struct TOKEN tok;
 	int i, j, k;
 	int l, r;
+
+	int opt_p = p - env->code;
+	if (env->opt[opt_p].nxt_tok_p != NULL) {
+		i = (type == '}') ? 0 : ((type == ']') ? 1 : 2);
+		if ((int)(env->opt[opt_p].nxt_tok_p[i]) != -1)
+			return (int)(env->opt[opt_p].nxt_tok_p[i]);
+	}
+
 	if (type == '}') { l = '{'; r = '}'; }
 	else if (type == ']') { l = '['; r = ']'; }
 	else /* ')' */ { l = '('; r = ')'; }
 	i = 0;
 	j = 0;
 	while (1) {
-		k = next_token(p + j, &tok);
+		k = next_token(p + j, &tok, env);
 		if (tok.type == l) i++;
 		else if (tok.type == r) {
 			i--;
@@ -251,15 +312,21 @@ int next_token_pair(char *p, int type) {
 		}
 		j += k;
 	}
+
+	if (env->opt[opt_p].nxt_tok_p == NULL) {
+		env->opt[opt_p].nxt_tok_p = (void **)malloc(3 * sizeof(void*));
+		memset(env->opt[opt_p].nxt_tok_p, -1, (3 * sizeof(void*)));
+	}
+	env->opt[opt_p].nxt_tok_p[(type == '}') ? 0 : ((type == ']') ? 1 : 2)] = (void *)j;
 	return j;
 }
 
-int next_token_type(char *p, int type) {
+int next_token_type(char *p, int type, struct ENV *env) {
 	struct TOKEN tok;
 	int i, j;
 	i = 0;
 	while (1) {
-		j = next_token(p + i, &tok);
+		j = next_token(p + i, &tok, env);
 		if (tok.type == token_id) free(tok.id);
 		if (tok.type == type) break;
 		i += j;
@@ -267,7 +334,7 @@ int next_token_type(char *p, int type) {
 	return i;
 }
 
-int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int opnum) {
+int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int opnum, struct ENV *env) {
 	//assoc 1: left-to-right  0: right-to-left
 	//opnum 0: any  otherwise, the number of operand
 	struct TOKEN tok;
@@ -277,10 +344,10 @@ int next_token_operator(char *p, int len, int type[], int tsize, int assoc, int 
 	i = 0;
 	k = 0;
 	while (p+i < q) {
-		j = next_token(p + i, &tok);
-		if (tok.type == '{') { i += j; i += next_token_pair(p + i, '}'); continue; }
-		if (tok.type == '[') { i += j; i += next_token_pair(p + i, ']'); continue; }
-		if (tok.type == '(') { i += j; i += next_token_pair(p + i, ')'); k = 1; continue; }
+		j = next_token(p + i, &tok, env);
+		if (tok.type == '{') { i += j; i += next_token_pair(p + i, '}', env); continue; }
+		if (tok.type == '[') { i += j; i += next_token_pair(p + i, ']', env); continue; }
+		if (tok.type == '(') { i += j; i += next_token_pair(p + i, ')', env); k = 1; continue; }
 		for (l = 0; l < tsize; l++) {
 			if (tok.type == type[l]) {
 				if (opnum == 0 || k + 1 == opnum) {
@@ -331,21 +398,50 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 		{ 3, 0, 1, '-', '!', '~' }, //13
 		{ 0 } //14
 	};
+	
+	int opt_p = p - env->code, opt_s = -1;
+	if (env->opt[opt_p].prs_exp == NULL) {
+		env->opt[opt_p].prs_exp = (void **)malloc((2 + 2 * 8) * sizeof(void*));
+		env->opt[opt_p].prs_exp[0] = (void*)8;
+		env->opt[opt_p].prs_exp[1] = (void*)0;
+	}
+	else if (env->opt[opt_p].prs_exp[0] == env->opt[opt_p].prs_exp[1]) {
+		void **_prs_exp = (void **)malloc((2 + 2 * 2 * (int)env->opt[opt_p].prs_exp[0]) * sizeof(void*));
+		memcpy(_prs_exp, env->opt[opt_p].prs_exp, (2 + 2 * (int)env->opt[opt_p].prs_exp[0]) * sizeof(void*));
+		_prs_exp[0] = (void*)(2 * (int)_prs_exp[0]);
+		free(env->opt[opt_p].prs_exp);
+		env->opt[opt_p].prs_exp = _prs_exp;
+	}
+	for (i = 0; i < (int)env->opt[opt_p].prs_exp[1]; i++) {
+		if ((int)env->opt[opt_p].prs_exp[2 + 2 * i] == len) {
+			l = (int)env->opt[opt_p].prs_exp[3 + 2 * i];
+			opt_s = 3 + 2 * i;
+			break;
+		}
+	}
+	if (opt_s == -1) {
+		l = 0;
+		env->opt[opt_p].prs_exp[2 + 2 * (int)env->opt[opt_p].prs_exp[1]] = (void*)len;
+		opt_s = 3 + 2 * (int)env->opt[opt_p].prs_exp[1];
+		env->opt[opt_p].prs_exp[1] = (void*)((int)env->opt[opt_p].prs_exp[1] + 1);
+	}
+
 	ret.id = NULL;
-	for (l = 0; l < 15; l++) {
+	for (; l < 15; l++) {
 		if (tl[l][0] == 0) continue;
-		if ((i = next_token_operator(p, len, &tl[l][3], tl[l][0], tl[l][1], tl[l][2])) == -1) continue;
+		env->opt[opt_p].prs_exp[opt_s] = (void*)l;
+		if ((i = next_token_operator(p, len, &tl[l][3], tl[l][0], tl[l][1], tl[l][2], env)) == -1) continue;
 		if (l == 0) { //','
 			parse_expression(p, i, env);
 			p += i;
-			p += next_token(p, &tok); //','
+			p += next_token(p, &tok, env); //','
 			return parse_expression(p, q - p, env);
 		}
 		if (l == 1) { //'='
 			struct VAR v, u;
-			i += next_token(p + i, &tok); //'='
+			i += next_token(p + i, &tok, env); //'='
 			v = parse_expression(p + i, q - (p + i), env);
-			p += next_token(p, &tok); //id
+			p += next_token(p, &tok, env); //id
 			for (j = env->len - 1; j >= 0; j--) {
 				if (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0) {
 					free(tok.id);
@@ -369,8 +465,8 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 						ret.fval = v.fval;
 						return ret;
 					}
-					p += next_token(p, &tok); //[
-					i = next_token_pair(p, ']');
+					p += next_token(p, &tok, env); //[
+					i = next_token_pair(p, ']', env);
 					u = parse_expression(p, i, env);
 					if (u.type == var_float) {
 						u.type = var_int;
@@ -405,7 +501,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 				return ret;
 			}
 			p += i;
-			p += next_token(p, &tok); //token_lor, token_land
+			p += next_token(p, &tok, env); //token_lor, token_land
 			v = parse_expression(p, q - p, env);
 			if (v.type == var_float) {
 				v.type = var_int;
@@ -423,7 +519,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 				v.ival = (int)v.fval;
 			}
 			p += i;
-			p += next_token(p, &tok); //'|', '^', '&'
+			p += next_token(p, &tok, env); //'|', '^', '&'
 			u = parse_expression(p, q - p, env);
 			if (u.type == var_float) {
 				u.type = var_int;
@@ -442,7 +538,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			struct VAR v, u;
 			v = parse_expression(p, i, env);
 			p += i;
-			p += next_token(p, &tok); //token_neq, token_eq, '>', token_geq, '<', token_leq
+			p += next_token(p, &tok, env); //token_neq, token_eq, '>', token_geq, '<', token_leq
 			u = parse_expression(p, q - p, env);
 
 			if (v.type != u.type) {
@@ -468,7 +564,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			struct VAR v, u;
 			v = parse_expression(p, i, env);
 			p += i;
-			p += next_token(p, &tok); //'+', '-', '*', '/', '%'
+			p += next_token(p, &tok, env); //'+', '-', '*', '/', '%'
 			u = parse_expression(p, q - p, env);
 
 			if (v.type != u.type) {
@@ -503,7 +599,7 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 		if (l == 13) { //'-', '!', '~'
 			struct VAR v;
 			p += i;
-			p += next_token(p, &tok); //'-', '!', '~'
+			p += next_token(p, &tok, env); //'-', '!', '~'
 			v = parse_expression(p, q - p, env);
 
 			if (tok.type == '-') {
@@ -525,9 +621,9 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 	}
 	//the rest is either (exp) or id or id[] or val
 	//currently do not support id(...)
-	p += next_token(p, &tok); //','
+	p += next_token(p, &tok, env); //','
 	if (tok.type == '(') {
-		i = next_token_pair(p, ')');
+		i = next_token_pair(p, ')', env);
 		return parse_expression(p, i, env);
 	}
 	if (tok.type == token_ival) {
@@ -556,8 +652,8 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 				ret.fval = env->var[j].fval;
 				return ret;
 			}
-			p += next_token(p, &tok); //'['
-			i = next_token_pair(p, ']');
+			p += next_token(p, &tok, env); //'['
+			i = next_token_pair(p, ']', env);
 			v = parse_expression(p, i, env);
 			if (v.type == var_float) {
 				v.type = var_int;
@@ -585,42 +681,42 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 	int i, ret = 0;
 	
 	while (p < q) {
-		i = next_token(p, &tok);
+		i = next_token(p, &tok, env);
 		if (tok.type == ';') {
 			p += i;
 			continue;
 		}
 		if (tok.type == '{') {
 			p += i;
-			i = next_token_pair(p, '}');
+			i = next_token_pair(p, '}', env);
 			env_new_level(env);
 			ret = parse_statements(p, i, retp, env);
 			env_delete_level(env);
 			if (ret) return ret;
 			p += i;
-			p += next_token(p, &tok); //'}'
+			p += next_token(p, &tok, env); //'}'
 			continue;
 		}
 		if (tok.type == token_if) {
 			struct VAR cond;
 			p += i;
-			p += next_token(p, &tok); //'('
-			i = next_token_pair(p, ')');
+			p += next_token(p, &tok, env); //'('
+			i = next_token_pair(p, ')', env);
 			cond = parse_expression(p, i, env);
 			if (cond.type == var_float) {
 				cond.type = var_int;
 				cond.ival = (int)cond.fval;
 			}
 			p += i;
-			p += next_token(p, &tok); //')'
-			next_token(p, &tok);
+			p += next_token(p, &tok, env); //')'
+			next_token(p, &tok, env);
 			if (tok.type == '{') {
-				p += next_token(p, &tok); //'{'
-				i = next_token_pair(p, '}');
+				p += next_token(p, &tok, env); //'{'
+				i = next_token_pair(p, '}', env);
 			}
 			else {
 				if (tok.type == token_id) free(tok.id);
-				i = next_token_type(p, ';');
+				i = next_token_type(p, ';', env);
 			}
 			if (cond.ival) {
 				env_new_level(env);
@@ -629,18 +725,18 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 				if (ret) return ret;
 			}
 			p += i;
-			p += next_token(p, &tok); //'}' or ';'
-			next_token(p, &tok);
+			p += next_token(p, &tok, env); //'}' or ';'
+			next_token(p, &tok, env);
 			if (tok.type == token_else) {
-				p += next_token(p, &tok); //else
-				next_token(p, &tok);
+				p += next_token(p, &tok, env); //else
+				next_token(p, &tok, env);
 				if (tok.type == '{') {
-					p += next_token(p, &tok); //'{'
-					i = next_token_pair(p, '}');
+					p += next_token(p, &tok, env); //'{'
+					i = next_token_pair(p, '}', env);
 				}
 				else {
 					if (tok.type == token_id) free(tok.id);
-					i = next_token_type(p, ';');
+					i = next_token_type(p, ';', env);
 				}
 				if (!cond.ival) {
 					env_new_level(env);
@@ -649,7 +745,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 					if (ret) return ret;
 				}
 				p += i;
-				p += next_token(p, &tok); //'}' or ';'
+				p += next_token(p, &tok, env); //'}' or ';'
 			}
 			else {
 				if (tok.type == token_id) free(tok.id);
@@ -661,18 +757,18 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 			char * _p;
 			int _i;
 			p += i;
-			p += next_token(p, &tok); //'('
-			i = next_token_pair(p, ')');
+			p += next_token(p, &tok, env); //'('
+			i = next_token_pair(p, ')', env);
 			_p = p + i;
-			_p += next_token(_p, &tok); //')'
-			next_token(_p, &tok);
+			_p += next_token(_p, &tok, env); //')'
+			next_token(_p, &tok, env);
 			if (tok.type == '{') {
-				_p += next_token(_p, &tok); //'{'
-				_i = next_token_pair(_p, '}');
+				_p += next_token(_p, &tok, env); //'{'
+				_i = next_token_pair(_p, '}', env);
 			}
 			else {
 				if (tok.type == token_id) free(tok.id);
-				_i = next_token_type(_p, ';');
+				_i = next_token_type(_p, ';', env);
 			}
 			while (1) {
 				cond = parse_expression(p, i, env);
@@ -691,16 +787,16 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 				else break;
 			}
 			p = _p + _i;
-			p += next_token(p, &tok); //'}' or ';'
+			p += next_token(p, &tok, env); //'}' or ';'
 			continue;
 		}
 		if (tok.type == token_return) {
 			struct VAR v;
 			p += i;
-			next_token(p, &tok);
+			next_token(p, &tok, env);
 			if (tok.type != ';') {//!="return;"
 				if (tok.type == token_id) free(tok.id);
-				i = next_token_type(p, ';');
+				i = next_token_type(p, ';', env);
 				v = parse_expression(p, i, env);
 				if (env->var[retp].type == var_int)
 					env->var[retp].ival = (v.type == var_int ? v.ival : (int)v.fval);
@@ -716,16 +812,16 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 			int t = (tok.type == token_int ? var_int : var_float);
 			p += i;
 			while (1) {
-				p += next_token(p, &tok);
+				p += next_token(p, &tok, env);
 				env_new_null(env);
 				env->var[env->len - 1].id = tok.id;
 				env->var[env->len - 1].type = t;
-				p += next_token(p, &tok);
+				p += next_token(p, &tok, env);
 				if (tok.type == ',') continue;
 				if (tok.type == ';') break;
 				if (tok.type == '[') {
 					struct VAR v;
-					i = next_token_pair(p, ']');
+					i = next_token_pair(p, ']', env);
 					v = parse_expression(p, i, env);
 					if (v.type == var_float) {
 						v.type = var_int;
@@ -742,8 +838,8 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 						memset(env->var[env->len - 1].fvals, 0, v.ival * sizeof(float));
 					}
 					p += i;
-					p += next_token(p, &tok); //']'
-					p += next_token(p, &tok);
+					p += next_token(p, &tok, env); //']'
+					p += next_token(p, &tok, env);
 				}
 				if (tok.type == ',') continue;
 				if (tok.type == ';') break;
@@ -752,10 +848,10 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 						int t[] = { ',', '}'};
 						struct VAR v;
 						int j = 0;
-						p += next_token(p, &tok); //'{'
+						p += next_token(p, &tok, env); //'{'
 						if (tok.type != '{') error_log("Syntax of array initialization is incorrect");
 						while (1) {
-							i = next_token_operator(p, q - p, t, 2, 0, 0);
+							i = next_token_operator(p, q - p, t, 2, 0, 0, env);
 							v = parse_expression(p, i, env);
 							if (env->var[env->len - 1].type == var_ints) {
 								if (v.type == var_float) {
@@ -772,7 +868,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 								env->var[env->len - 1].fvals[j] = v.fval;
 							}
 							p += i;
-							p += next_token(p, &tok); //',' or '}'
+							p += next_token(p, &tok, env); //',' or '}'
 							if (tok.type == '}') break;
 							if (tok.type != ',') error_log("Syntax of array initialization is incorrect");
 							j++;
@@ -781,7 +877,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 					else { //var_int or var_float
 						int t[] = { ',', ';' };
 						struct VAR v;
-						i = next_token_operator(p, q - p, t, 2, 0, 0);
+						i = next_token_operator(p, q - p, t, 2, 0, 0, env);
 						v = parse_expression(p, i, env);
 						if (env->var[env->len - 1].type == var_int) {
 							if (v.type == var_float) {
@@ -799,7 +895,7 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 						}
 						p += i;
 					}
-					p += next_token(p, &tok);
+					p += next_token(p, &tok, env);
 				}
 				if (tok.type == ',') continue;
 				if (tok.type == ';') break;
@@ -808,10 +904,10 @@ int parse_statements(char *p, int len, int retp, struct ENV *env) { //1 return  
 		}
 		//the rest is expression
 		if (tok.type == token_id) free(tok.id);
-		i = next_token_type(p, ';');
+		i = next_token_type(p, ';', env);
 		parse_expression(p, i, env);
 		p += i;
-		p += next_token(p, &tok); //';'
+		p += next_token(p, &tok, env); //';'
 	}
 	
 	return ret;
@@ -824,17 +920,17 @@ void parse_function(char *p, struct ENV *env) {
 	int i;
 	int retp;
 	
-	p += next_token(p, &type);
+	p += next_token(p, &type, env);
 	if (type.type == token_id) { //default function type is int
 		id = type;
 		type.type = token_int;
 		type.id = NULL;
 	}
 	else {
-		p += next_token(p, &id);
+		p += next_token(p, &id, env);
 	}
-	p += next_token(p, &tok); //'('
-	p += next_token(p, &tok);
+	p += next_token(p, &tok, env); //'('
+	p += next_token(p, &tok, env);
 	i = 0;
 	while (tok.type != ')') {
 		i++;
@@ -853,7 +949,7 @@ void parse_function(char *p, struct ENV *env) {
 					env->var[env->len - i].type = var_int;
 				else //token_float
 					env->var[env->len - i].type = var_float;
-				p += next_token(p, &tok); //get the id
+				p += next_token(p, &tok, env); //get the id
 			}
 			env->var[env->len - i].id = tok.id;
 		}
@@ -866,12 +962,12 @@ void parse_function(char *p, struct ENV *env) {
 					env->var[env->len - i].type = var_ints;
 				else //token_float
 					env->var[env->len - i].type = var_floats;
-				p += next_token(p, &tok); //get the id
+				p += next_token(p, &tok, env); //get the id
 			}
 			env->var[env->len - i].id = tok.id;
-			do p += next_token(p, &tok); while (tok.type != ']');
+			do p += next_token(p, &tok, env); while (tok.type != ']');
 		}
-		do p += next_token(p, &tok); while (tok.type == ',');
+		do p += next_token(p, &tok, env); while (tok.type == ',');
 	}
 	retp = env->len - i - 1;
 	if (type.type == token_int)
@@ -880,15 +976,15 @@ void parse_function(char *p, struct ENV *env) {
 		env->var[retp].type = var_void;
 	else //token_float
 		env->var[retp].type = var_float;
-	p += next_token(p, &tok); //'{'
-	parse_statements(p, next_token_pair(p, '}'), retp, env);
+	p += next_token(p, &tok, env); //'{'
+	parse_statements(p, next_token_pair(p, '}', env), retp, env);
 	free(id.id);
 }
 
 void parse_main(char *p) {
 	struct ENV env;
 	int retp;
-	env_init(&env);
+	env_init(&env, p);
 	env_new_level(&env);
 	env_new_null(&env); //store return value
 	retp = env.len - 1;

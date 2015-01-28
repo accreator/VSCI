@@ -1,7 +1,7 @@
 float pi() {
 float ret = 0;
 int i = 1;
-while(i<200000) {
+while(i<500000) {
 ret = ret + 1.0/i/i;
 i = i + 1;
 }
