@@ -399,38 +399,46 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 		{ 0 } //14
 	};
 	
-	int opt_p = p - env->code, opt_s = -1;
+	int opt_p = p - env->code, opt_s = -1, opt_r = 1;
 	if (env->opt[opt_p].prs_exp == NULL) {
-		env->opt[opt_p].prs_exp = (void **)malloc((2 + 2 * 8) * sizeof(void*));
+		env->opt[opt_p].prs_exp = (void **)malloc((2 + 4 * 8) * sizeof(void*));
 		env->opt[opt_p].prs_exp[0] = (void*)8;
 		env->opt[opt_p].prs_exp[1] = (void*)0;
 	}
 	else if (env->opt[opt_p].prs_exp[0] == env->opt[opt_p].prs_exp[1]) {
-		void **_prs_exp = (void **)malloc((2 + 2 * 2 * (int)env->opt[opt_p].prs_exp[0]) * sizeof(void*));
-		memcpy(_prs_exp, env->opt[opt_p].prs_exp, (2 + 2 * (int)env->opt[opt_p].prs_exp[0]) * sizeof(void*));
+		void **_prs_exp = (void **)malloc((2 + 2 * 4 * (int)env->opt[opt_p].prs_exp[0]) * sizeof(void*));
+		memcpy(_prs_exp, env->opt[opt_p].prs_exp, (2 + 4 * (int)env->opt[opt_p].prs_exp[0]) * sizeof(void*));
 		_prs_exp[0] = (void*)(2 * (int)_prs_exp[0]);
 		free(env->opt[opt_p].prs_exp);
 		env->opt[opt_p].prs_exp = _prs_exp;
 	}
 	for (i = 0; i < (int)env->opt[opt_p].prs_exp[1]; i++) {
-		if ((int)env->opt[opt_p].prs_exp[2 + 2 * i] == len) {
-			l = (int)env->opt[opt_p].prs_exp[3 + 2 * i];
-			opt_s = 3 + 2 * i;
+		if ((int)env->opt[opt_p].prs_exp[2 + 4 * i] == len) {
+			l = (int)env->opt[opt_p].prs_exp[3 + 4 * i];
+			opt_s = 3 + 4 * i;
 			break;
 		}
 	}
 	if (opt_s == -1) {
 		l = 0;
-		env->opt[opt_p].prs_exp[2 + 2 * (int)env->opt[opt_p].prs_exp[1]] = (void*)len;
-		opt_s = 3 + 2 * (int)env->opt[opt_p].prs_exp[1];
+		opt_r = 0;
+		env->opt[opt_p].prs_exp[2 + 4 * (int)env->opt[opt_p].prs_exp[1]] = (void*)len;
+		opt_s = 3 + 4 * (int)env->opt[opt_p].prs_exp[1];
 		env->opt[opt_p].prs_exp[1] = (void*)((int)env->opt[opt_p].prs_exp[1] + 1);
 	}
 
 	ret.id = NULL;
 	for (; l < 15; l++) {
 		if (tl[l][0] == 0) continue;
-		env->opt[opt_p].prs_exp[opt_s] = (void*)l;
-		if ((i = next_token_operator(p, len, &tl[l][3], tl[l][0], tl[l][1], tl[l][2], env)) == -1) continue;
+		if (opt_r) {
+			i = (int)env->opt[opt_p].prs_exp[opt_s + 1];
+		}
+		else {
+			env->opt[opt_p].prs_exp[opt_s] = (void*)l;
+			i = next_token_operator(p, len, &tl[l][3], tl[l][0], tl[l][1], tl[l][2], env);
+			env->opt[opt_p].prs_exp[opt_s + 1] = (void*)i;
+		}
+		if (i == -1) continue;
 		if (l == 0) { //','
 			parse_expression(p, i, env);
 			p += i;
@@ -442,9 +450,10 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			i += next_token(p + i, &tok, env); //'='
 			v = parse_expression(p + i, q - (p + i), env);
 			p += next_token(p, &tok, env); //id
-			for (j = env->len - 1; j >= 0; j--) {
-				if (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0) {
+			for (j = opt_r ? (int)env->opt[opt_p].prs_exp[opt_s + 2] : env->len - 1; j >= 0; j--) {
+				if (opt_r || (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0)) {
 					free(tok.id);
+					if (!opt_r) env->opt[opt_p].prs_exp[opt_s + 2] = (void*)j;
 					if ((env->var[j].type == var_int || env->var[j].type == var_ints) && v.type == var_float) {
 						v.type = var_int;
 						v.ival = (int)v.fval;
@@ -638,10 +647,11 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 	}
 	//tok.type == token_id
 	if (tok.type != token_id) error_log("Unexpected syntax error");
-	for (j = env->len - 1; j >= 0; j--) {
-		if (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0) {
+	for (j = opt_r ? (int)env->opt[opt_p].prs_exp[opt_s + 2] : env->len - 1; j >= 0; j--) {
+		if (opt_r || (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0)) {
 			struct VAR v;
 			free(tok.id);
+			if (!opt_r) env->opt[opt_p].prs_exp[opt_s + 2] = (void*)j;
 			if (env->var[j].type == var_int) {
 				ret.type = var_int;
 				ret.ival = env->var[j].ival;
