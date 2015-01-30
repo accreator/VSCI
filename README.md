@@ -8,7 +8,7 @@ Currently, VSCI supports the following features:
 * / + - % & ^ ~ | << >> ,
 * > < >= <= == != && || !
 * = ( ) , ; { } [ ] 
-* *(only 1-dim array)*
+* *(only 1-dim array is supported; VLA is supported)*
 
 Try the following:
 

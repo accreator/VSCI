@@ -12,7 +12,7 @@
  && || !
  =
  ( ) [ ] , ; { }
- 1 dim array only
+ (only 1 dim array is supported; VLA is supported)
 */
 
 #include <stdio.h>
@@ -380,7 +380,8 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 	char *q = p + len;
 	struct VAR ret;
 	int i, j, l;
-	int tl[15][7] = {
+	struct VAR v, u;
+	static int tl[15][7] = {
 		//num, assoc, opnum,  tok_1, tok_2, ...
 		{ 1, 1, 2, ',' }, //0
 		{ 1, 0, 2, '=' }, //1
@@ -446,7 +447,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			return parse_expression(p, q - p, env);
 		}
 		if (l == 1) { //'='
-			struct VAR v, u;
 			i += next_token(p + i, &tok, env); //'='
 			v = parse_expression(p + i, q - (p + i), env);
 			p += next_token(p, &tok, env); //id
@@ -498,7 +498,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			error_log("Undefined variable %s", tok.id);
 		}
 		if (l == 3 || l == 4) { //token_lor, token_land
-			struct VAR v;
 			v = parse_expression(p, i, env);
 			if (v.type == var_float) {
 				v.type = var_int;
@@ -521,7 +520,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			return ret;
 		}
 		if (l == 5 || l == 6 || l == 7 || l == 10) { //'|', '^', '&', token_shl, token_shr
-			struct VAR v, u;
 			v = parse_expression(p, i, env);
 			if (v.type == var_float) {
 				v.type = var_int;
@@ -544,7 +542,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			return ret;
 		}
 		if (l == 8 || l == 9) { //token_neq, token_eq, '>', token_geq, '<', token_leq
-			struct VAR v, u;
 			v = parse_expression(p, i, env);
 			p += i;
 			p += next_token(p, &tok, env); //token_neq, token_eq, '>', token_geq, '<', token_leq
@@ -570,7 +567,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			return ret;
 		}
 		if (l == 11 || l == 12) { //'+', '-', '*', '/', '%'
-			struct VAR v, u;
 			v = parse_expression(p, i, env);
 			p += i;
 			p += next_token(p, &tok, env); //'+', '-', '*', '/', '%'
@@ -606,7 +602,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 			return ret;
 		}
 		if (l == 13) { //'-', '!', '~'
-			struct VAR v;
 			p += i;
 			p += next_token(p, &tok, env); //'-', '!', '~'
 			v = parse_expression(p, q - p, env);
@@ -649,7 +644,6 @@ struct VAR parse_expression(char *p, int len, struct ENV *env) {
 	if (tok.type != token_id) error_log("Unexpected syntax error");
 	for (j = opt_r ? (int)env->opt[opt_p].prs_exp[opt_s + 2] : env->len - 1; j >= 0; j--) {
 		if (opt_r || (env->var[j].id != NULL && strcmp(env->var[j].id, tok.id) == 0)) {
-			struct VAR v;
 			free(tok.id);
 			if (!opt_r) env->opt[opt_p].prs_exp[opt_s + 2] = (void*)j;
 			if (env->var[j].type == var_int) {
